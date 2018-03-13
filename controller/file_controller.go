@@ -7,11 +7,10 @@ import (
 	"github.com/ndphu/fm/service"
 	"gopkg.in/mgo.v2"
 	"net/http"
+	"strings"
 )
 
-var (
-	PATH = "/api/file"
-)
+var ()
 
 type FileController struct {
 	fileService *service.FileService
@@ -28,9 +27,14 @@ func NewFileController(fs *service.FileService, r *gin.Engine) *FileController {
 }
 
 func (c *FileController) initRouter(r *gin.Engine) {
-	r.POST(PATH+"/", c.createFile)
-	r.GET(PATH+"/:id", c.getFileById)
-	r.PUT(PATH+"/:id", c.updateFileById)
+	// file
+	r.POST("/api/files", c.createFile)
+	r.GET("/api/file/:id", c.getFileById)
+	r.PUT("/api/file/:id", c.updateFileById)
+	r.DELETE("/api/file/:id", c.deleteFileById)
+
+	// children
+	r.GET("/api/file/:id/children", c.getChildren)
 }
 
 func (c *FileController) getFileById(g *gin.Context) {
@@ -50,13 +54,12 @@ func (c *FileController) getFileById(g *gin.Context) {
 	} else {
 		g.JSON(http.StatusOK, f)
 	}
-
 }
 
 func (c *FileController) createFile(g *gin.Context) {
 	var newFile model.File
 	if err := g.ShouldBindJSON(&newFile); err == nil {
-		if err = validateFileObject(&newFile); err != nil {
+		if err = c.validateFileObject(&newFile); err != nil {
 			g.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 			return
 		}
@@ -72,11 +75,55 @@ func (c *FileController) createFile(g *gin.Context) {
 }
 
 func (c *FileController) updateFileById(g *gin.Context) {
+	g.JSON(500, gin.H{"err": "method not impleted"})
 }
 
-func validateFileObject(f *model.File) error {
-	if f.IsRoot {
-		return errors.New("you can't create root folder")
+func (c *FileController) deleteFileById(g *gin.Context) {
+	g.JSON(500, gin.H{"err": "method not impleted"})
+
+}
+
+func (c *FileController) getChildren(g *gin.Context) {
+	id := g.Param("id")
+	list, err := c.fileService.FindChildren(id)
+	if err != nil {
+		var status int
+		if err == mgo.ErrNotFound {
+			status = http.StatusNotFound
+		} else {
+			status = http.StatusInternalServerError
+		}
+		g.JSON(status, gin.H{
+			"err": err.Error(),
+		})
+
+	} else {
+		g.JSON(http.StatusOK, list)
+	}
+
+}
+
+func (c *FileController) validateFileObject(f *model.File) error {
+	if strings.Trim(f.Name, " ") == "" {
+		return errors.New("file name can not empty")
+	}
+
+	for _, char := range []string{"\\", "|", "/", "*", "?", "\"", "<", ">"} {
+		if strings.Index(f.Name, char) >= 0 {
+			return errors.New("file name cannot contains '" + char + "'")
+		}
+	}
+
+	if f.ParentId.Hex() == "" {
+		return errors.New("parentId is required")
+	} else {
+		parent, err := c.fileService.FileFileById(f.ParentId.Hex())
+		if err == mgo.ErrNotFound {
+			return errors.New("parent not exists")
+		}
+		if parent.Type != model.TYPE_FOLDER {
+			return errors.New("parent should be a folder")
+		}
 	}
 	return nil
 }

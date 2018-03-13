@@ -3,11 +3,11 @@ package dao
 import (
 	"fmt"
 	"gopkg.in/mgo.v2"
-	_ "gopkg.in/mgo.v2/bson"
+	"os"
 )
 
 var (
-	SERVER = "192.168.99.100"
+	SERVER = os.Getenv("MONGODB_HOST")
 )
 
 type DAO struct {
