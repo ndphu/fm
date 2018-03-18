@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/fm/service"
 )
@@ -26,9 +25,7 @@ func (ctl *LoginController) Init(r *gin.Engine) {
 
 func (ctl *LoginController) LoginCallbackHandler(c *gin.Context) {
 	code := c.Query("code")
-	fmt.Println("Got FB code " + code)
 	ctl.loginService.ProcessAccessCode(code)
-
 }
 
 func (ctl *LoginController) LoginHandler(c *gin.Context) {

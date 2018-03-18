@@ -22,8 +22,12 @@ func main() {
 	authorized := r.Group("/pfm/api")
 	authorized.Use(filter.AuthFilter())
 
+	// user
+	userService := service.NewUserService(db)
+
 	// login
 	loginService := service.NewLoginService(db)
+	loginService.SetUserService(userService)
 	loginController := controller.NewLoginController(loginService)
 	loginController.Init(r)
 

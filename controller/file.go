@@ -28,13 +28,13 @@ func NewFileController(fs *service.FileService, r *gin.Engine) *FileController {
 
 func (c *FileController) initRouter(r *gin.Engine) {
 	// file
-	r.POST("/api/files", c.createFile)
-	r.GET("/api/file/:id", c.getFileById)
-	r.PUT("/api/file/:id", c.updateFileById)
-	r.DELETE("/api/file/:id", c.deleteFileById)
+	r.POST("/pfm/api/files", c.createFile)
+	r.GET("/pfm/api/file/:id", c.getFileById)
+	r.PUT("/pfm/api/file/:id", c.updateFileById)
+	r.DELETE("/pfm/api/file/:id", c.deleteFileById)
 
 	// children
-	r.GET("/api/file/:id/children", c.getChildren)
+	r.GET("/pfm/api/file/:id/children", c.getChildren)
 }
 
 func (c *FileController) getFileById(g *gin.Context) {

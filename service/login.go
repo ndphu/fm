@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/ndphu/fm/dao"
 	"github.com/ndphu/fm/model"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,12 +15,13 @@ import (
 var (
 	APP_TOKEN      = os.Getenv("FACEBOOK_APP_TOKEN")
 	APP_SECRET     = os.Getenv("FACEBOOK_APP_SECRET")
-	APP_ID         = "568365100192445"
+	APP_ID         = os.Getenv("FACEBOOK_APP_ID")
 	LOGIN_CALLBACK = "http://localhost:8080/pfm/login/callback"
 )
 
 type LoginService struct {
-	db *dao.DAO
+	db          *dao.DAO
+	userService *UserService
 }
 
 func NewLoginService(db *dao.DAO) *LoginService {
@@ -27,27 +30,60 @@ func NewLoginService(db *dao.DAO) *LoginService {
 	}
 }
 
+func (s *LoginService) SetUserService(us *UserService) {
+	s.userService = us
+}
+
 func (s *LoginService) ProcessAccessCode(code string) {
 	accessToken, err := s.GetAccessTokenFromAccessCode(code)
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("Access Token = " + accessToken)
-
 	fat, err := s.ValidateFacebookAcessToken(accessToken)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("%v\n", fat.UserId)
+	user, err := s.userService.FindUserByExternalId(fat.UserId)
+	if err == mgo.ErrNotFound {
+		user = &model.User{
+			Id:         bson.NewObjectId(),
+			ExternalId: fat.UserId,
+		}
+		s.userService.CreateUser(user)
+	}
+
+	getUserDetails := fmt.Sprintf("https://graph.facebook.com/v2.12/%s?fields=id,gender,email,name,first_name,last_name,address&access_token=%s", fat.UserId, accessToken)
+
+	response, err := http.Get(getUserDetails)
+	if err != nil {
+		panic(err)
+	}
+
+	defer response.Body.Close()
+	content, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	fu := model.FacebookUser{}
+
+	if err := json.Unmarshal(content, &fu); err != nil {
+		panic(err)
+	}
+	user.FirstName = fu.FirstName
+	user.LastName = fu.LastName
+
+	s.userService.UpdateUser(user)
 }
 
 func (s *LoginService) GetAccessTokenFromAccessCode(code string) (string, error) {
-	fmt.Println("App Token = ", APP_TOKEN)
-	fmt.Println("App Secret = ", APP_SECRET)
+	if APP_ID == "" || APP_SECRET == "" || APP_TOKEN == "" {
+		panic("Invalid settings for facebook app")
+	}
 	getTokenUrl := fmt.Sprintf("https://graph.facebook.com/v2.12/oauth/access_token?client_id=%s&client_secret=%s&redirect_uri=%s&code=%s",
 		APP_ID, APP_SECRET, LOGIN_CALLBACK, code)
-	fmt.Println("Get Token URL " + getTokenUrl)
+
 	response, err := http.Get(getTokenUrl)
 	if err != nil {
 		return "", err
@@ -68,7 +104,6 @@ func (s *LoginService) GetAccessTokenFromAccessCode(code string) (string, error)
 
 func (s *LoginService) ValidateFacebookAcessToken(fbAccessToken string) (*model.FacebookAccessToken, error) {
 	fbUrl := fmt.Sprintf("https://graph.facebook.com/debug_token?input_token=%s&access_token=%s", fbAccessToken, APP_TOKEN)
-	fmt.Println("FB URL = " + fbUrl)
 	response, err := http.Get(fbUrl)
 	if err != nil {
 		return nil, err
