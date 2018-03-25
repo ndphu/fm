@@ -30,3 +30,9 @@ func (s *UserService) UpdateUser(update *model.User) (*model.User, error) {
 	err := s.DB.UserCollection().UpdateId(update.Id, update)
 	return update, err
 }
+
+func (s *UserService) FindAll() ([]model.User, error) {
+	var users []model.User
+	err := s.DB.UserCollection().Find(nil).All(&users)
+	return users, err
+}

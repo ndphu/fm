@@ -1,30 +1,64 @@
 package filter
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/fm/model"
+	"github.com/ndphu/fm/service"
+	"strings"
 )
 
-var (
-	LOGIN_REDIRECT = "https://www.facebook.com/v2.12/dialog/oauth?client_id=568365100192445&redirect_uri=http://localhost:8080/pfm/login&state={st=state123abc,ds=123456789}&response_type=token"
-)
+type AuthFilter struct {
+	tokenService *service.TokenService
+}
 
-func AuthFilter() gin.HandlerFunc {
+func NewAuthFilter() *AuthFilter {
+	return &AuthFilter{}
+}
+
+func (f *AuthFilter) SetTokenService(s *service.TokenService) {
+	f.tokenService = s
+}
+
+func (f *AuthFilter) AuthFilter() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		fmt.Println("AuthFilter is running")
-		auth := c.GetHeader("Authorization")
-		if isAuthValid(auth) {
+		fmt.Println("AuthFilter: checking path " + c.Request.URL.Path)
+		if strings.ToUpper(c.Request.Method) == "OPTIONS" {
+			// ignore for CORS
+			c.Next()
+		} else if isIgnorePath(c.Request.URL.Path) {
+			fmt.Println("AuthFilter: ignore path " + c.Request.URL.Path)
 			c.Next()
 		} else {
-			c.JSON(401, gin.H{"err": "not authorized"})
+			auth := c.GetHeader("Authorization")
+			if usr, err := f.validateToken(auth); err == nil {
+				c.Set("user", usr)
+				c.Next()
+			} else {
+				c.JSON(401, gin.H{"err": "not authorized. " + err.Error()})
+				c.Abort()
+			}
 		}
 	}
 }
 
-func isAuthValid(auth string) bool {
-	if auth == "" {
-		return false
+func isIgnorePath(path string) bool {
+	for _, p := range []string{
+		"/pfm/api/login/facebook",
+		"/pfm/api/admin/login",
+	} {
+		if path == p {
+			return true
+		}
 	}
+	return false
+}
 
-	return true
+func (f *AuthFilter) validateToken(auth string) (*model.User, error) {
+	if auth == "" {
+		return nil, errors.New("empty header")
+	}
+	tokenString := strings.Trim(strings.TrimPrefix(auth, "Bearer "), " ")
+	return f.tokenService.ValidateToken(tokenString)
 }

@@ -119,3 +119,44 @@ func (s *LoginService) ValidateFacebookAcessToken(fbAccessToken string) (*model.
 	err = json.Unmarshal(content, &fbResponse)
 	return &fbResponse.FacebookAccessToken, err
 }
+
+func (s *LoginService) ProcessAccessToken(accessToken string) *model.User {
+	fat, err := s.ValidateFacebookAcessToken(accessToken)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%v\n", fat.UserId)
+	user, err := s.userService.FindUserByExternalId(fat.UserId)
+	if err == mgo.ErrNotFound {
+		user = &model.User{
+			Id:         bson.NewObjectId(),
+			ExternalId: fat.UserId,
+		}
+		s.userService.CreateUser(user)
+	}
+
+	getUserDetails := fmt.Sprintf("https://graph.facebook.com/v2.12/%s?fields=id,gender,email,name,first_name,last_name,address&access_token=%s", fat.UserId, accessToken)
+
+	response, err := http.Get(getUserDetails)
+	if err != nil {
+		panic(err)
+	}
+
+	defer response.Body.Close()
+	content, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	fu := model.FacebookUser{}
+	fmt.Println(string(content))
+
+	if err := json.Unmarshal(content, &fu); err != nil {
+		panic(err)
+	}
+	user.FirstName = fu.FirstName
+	user.LastName = fu.LastName
+	s.userService.UpdateUser(user)
+
+	return user
+}

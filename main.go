@@ -18,9 +18,15 @@ func main() {
 	defer db.Shutdown()
 
 	r := gin.Default()
+	filter.SetupCorsFilter(r)
 
-	authorized := r.Group("/pfm/api")
-	authorized.Use(filter.AuthFilter())
+	authFilter := filter.NewAuthFilter()
+	r.Use(authFilter.AuthFilter())
+
+	// token
+	tokenService := service.NewTokenService()
+
+	authFilter.SetTokenService(tokenService)
 
 	// user
 	userService := service.NewUserService(db)
@@ -28,13 +34,20 @@ func main() {
 	// login
 	loginService := service.NewLoginService(db)
 	loginService.SetUserService(userService)
-	loginController := controller.NewLoginController(loginService)
+	loginController := controller.NewLoginController()
+	loginController.SetLoginService(loginService)
+	loginController.SetTokenService(tokenService)
 	loginController.Init(r)
 
 	// file
 	fileService := service.NewFileService(db)
 	fileService.Init()
 	controller.NewFileController(fileService, r)
+
+	// user
+	userController := controller.NewUserController()
+	userController.SetUserService(userService)
+	userController.Init(r)
 
 	r.Run()
 }
